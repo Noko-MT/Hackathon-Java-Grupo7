@@ -78,6 +78,66 @@ public class DomiService {
         return repartidor.isDisponible() && repartidor.puedeLlevar(km, esGrande, modoLluvia);
     }
 
+    //cierre del dia
+    public String cierreDelDia() {
+        Map<String, Integer> pedidosPorEstado = new HashMap<>();
+        pedidosPorEstado.put("EN_CAMINO", 0);
+        pedidosPorEstado.put("ENTREGADO", 0);
+        pedidosPorEstado.put("CANCELADO", 0);
+
+        Map<String, Double> ingresosPorTipo = new HashMap<>();
+
+        double ingresosTotales = 0;
+
+        for (Pedido pedido : pedidos) {
+            String estado = pedido.getEstado();
+
+            if (pedidosPorEstado.containsKey(estado)) {
+                pedidosPorEstado.put(estado, pedidosPorEstado.get(estado) + 1);
+            }
+
+            if ("ENTREGADO".equals(estado)) {
+                double costo = pedido.getCostoDomicilio();
+                ingresosTotales += costo;
+
+                String tipo = pedido.getRepartidor().getTipo();
+                double ingresoActual = ingresosPorTipo.containsKey(tipo) ? ingresosPorTipo.get(tipo) : 0;
+
+                ingresosPorTipo.put(tipo, ingresoActual + costo);
+            }
+        }
+
+        Repartidor repartidorEstrella = null;
+
+        for (Repartidor repartidor : repartidores) {
+            if (repartidor.getCantidadCalificaciones() > 0 && (repartidorEstrella == null || repartidor.obtenerPromedio() > repartidorEstrella.obtenerPromedio())) {
+                repartidorEstrella = repartidor;
+            }
+        }
+
+        String reporte = "=== CIERRE DEL DÍA ===\n";
+        reporte += "Total de pedidos: " + pedidos.size() + "\n";
+        reporte += "En camino: " + pedidosPorEstado.get("EN_CAMINO") + "\n";
+        reporte += "Entregados: " + pedidosPorEstado.get("ENTREGADO") + "\n";
+        reporte += "Cancelados: " + pedidosPorEstado.get("CANCELADO") + "\n";
+        reporte += "Ingresos totales: $" + Math.round(ingresosTotales) + "\n";
+        reporte += "Ingresos por tipo de repartidor:\n";
+
+        for (Map.Entry<String, Double> ingreso : ingresosPorTipo.entrySet()) {
+            reporte += ingreso.getKey() + ": $" + Math.round(ingreso.getValue()) + "\n";
+        }
+
+        if (repartidorEstrella == null) {
+            reporte += "Repartidor estrella: todavía no hay calificaciones.";
+        } else {
+            double promedio = repartidorEstrella.obtenerPromedio();
+            promedio = Math.round(promedio * 100.0) / 100.0;
+            reporte += "Repartidor estrella: " + repartidorEstrella.getNombre();
+        }
+
+        return reporte;
+    }
+
     //metodos del cliente
     public boolean validarBarrio(String barrio) {
         if (barrio == null || barrio.trim().isEmpty()) {
@@ -190,38 +250,44 @@ public class DomiService {
     }
 
     // Métodos de pedidos
-    public ArrayList<Repartidor> obtenerRepartidoresAptos(double kilometros, boolean tamaño, boolean lluvia) {
+    public ArrayList<Repartidor> obtenerRepartidoresAptos(double kilometros, boolean tamano) {
         ArrayList<Repartidor> aptos = new ArrayList<>();
 
         for (Repartidor repartidor : repartidores) {
-            if (repartidor.isDisponible() && repartidor.puedeLlevar(kilometros, tamaño, lluvia)) {
+            if (puedeRepartir(repartidor, kilometros, tamano)) {
                 aptos.add(repartidor);
             }
         }
         return aptos;
     }
 
-    public Pedido crearPedido(Cliente cliente, String descripcion, boolean tamaño,
-                              double kilometros, boolean lluvia) {
+    public Pedido crearPedido(String cedula, String descripcion, boolean tamano) {
+        Cliente cliente = buscarCliente(cedula);
+
         if (cliente == null) {
-            throw new IllegalArgumentException("El cliente no existe.");
-        }
-        if (descripcion == null || descripcion.trim().isEmpty()) {
-            throw new IllegalArgumentException("La descripción no puede estar vacía.");
-        }
-        if (kilometros <= 0) {
-            throw new IllegalArgumentException("La distancia debe ser mayor que cero.");
+            throw new IllegalArgumentException(
+                    "No existe un cliente con esa cédula."
+            );
         }
 
+        if (descripcion == null || descripcion.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "La descripción no puede estar vacía."
+            );
+        }
+
+        double kilometros = obtenerDistanciaBarrio(cliente.getBarrio());
         Repartidor mejor = null;
         double menorCosto = Double.MAX_VALUE;
         double menorTiempo = Double.MAX_VALUE;
 
-        for (Repartidor repartidor : obtenerRepartidoresAptos(kilometros, tamaño, lluvia)) {
-            double costo = repartidor.calcularCosto(kilometros, lluvia);
+        for (Repartidor repartidor :
+                obtenerRepartidoresAptos(kilometros, tamano)) {
+            double costo = repartidor.calcularCosto(kilometros, modoLluvia);
             double tiempo = repartidor.calcularTiempo(kilometros);
 
-            if (costo < menorCosto || (costo == menorCosto && tiempo < menorTiempo)) {
+            if (costo < menorCosto
+                    || (costo == menorCosto && tiempo < menorTiempo)) {
                 mejor = repartidor;
                 menorCosto = costo;
                 menorTiempo = tiempo;
@@ -229,11 +295,22 @@ public class DomiService {
         }
 
         if (mejor == null) {
-            throw new IllegalArgumentException("No hay repartidores disponibles para este pedido.");
+            throw new IllegalArgumentException(
+                    "No hay repartidores disponibles para este pedido."
+            );
         }
 
-        Pedido pedido = new Pedido(siguienteNumero, cliente, descripcion.trim(), tamaño,
-                kilometros, mejor, menorCosto, menorTiempo);
+        Pedido pedido = new Pedido(
+                siguienteNumero,
+                cliente,
+                descripcion.trim(),
+                tamano,
+                kilometros,
+                mejor,
+                menorCosto,
+                menorTiempo
+        );
+
         pedidos.add(pedido);
         mejor.setDisponible(false);
         siguienteNumero++;
