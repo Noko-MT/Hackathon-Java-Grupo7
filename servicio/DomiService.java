@@ -26,7 +26,6 @@ public class DomiService {
     private int siguienteNumero = 1;
 
 
-    //cargar datos
     public DomiService() {
         cargarBarrios();
         cargarRepartidores();
@@ -62,7 +61,6 @@ public class DomiService {
         clientes.put("1030405060", new Cliente("1030405060", "Mateo Rincón", "3109876543", "Usaquén", "Dirección no especificada"));
     }
 
-    //Modo lluvia
     private boolean modoLluvia = false;
 
     public boolean alternarModoLluvia() {
@@ -78,7 +76,45 @@ public class DomiService {
         return repartidor.isDisponible() && repartidor.puedeLlevar(km, esGrande, modoLluvia);
     }
 
-    //cierre del dia
+    public void registrarRepartidor(Repartidor repartidor) {
+        if (repartidor == null) {
+            throw new IllegalArgumentException("El repartidor no puede ser nulo.");
+        }
+        if (buscarRepartidor(repartidor.getCodigo()) != null) {
+            throw new IllegalArgumentException("Ya existe un repartidor con ese código.");
+        }
+        repartidores.add(repartidor);
+    }
+
+    public List<Repartidor> listarRepartidores() {
+        return new ArrayList<>(repartidores);
+    }
+
+    public Repartidor buscarRepartidor(String codigo) {
+        if (codigo == null || codigo.trim().isEmpty()) {
+            return null;
+        }
+        for (Repartidor repartidor : repartidores) {
+            if (repartidor.getCodigo().equals(codigo.trim())) {
+                return repartidor;
+            }
+        }
+        return null;
+    }
+
+    public void cambiarDisponibilidad(String codigo) {
+        Repartidor repartidor = buscarRepartidor(codigo);
+        if (repartidor == null) {
+            throw new IllegalArgumentException("No existe un repartidor con ese código.");
+        }
+        for (Pedido pedido : pedidos) {
+            if (pedido.getRepartidor() == repartidor && "EN_CAMINO".equals(pedido.getEstado())) {
+                throw new IllegalArgumentException("El repartidor tiene un pedido en camino.");
+            }
+        }
+        repartidor.setDisponible(!repartidor.isDisponible());
+    }
+
     public String cierreDelDia() {
         Map<String, Integer> pedidosPorEstado = new HashMap<>();
         pedidosPorEstado.put("EN_CAMINO", 0);
@@ -86,6 +122,10 @@ public class DomiService {
         pedidosPorEstado.put("CANCELADO", 0);
 
         Map<String, Double> ingresosPorTipo = new HashMap<>();
+
+        for (Repartidor repartidor : repartidores) {
+            ingresosPorTipo.put(repartidor.getTipo(), 0.0);
+        }
 
         double ingresosTotales = 0;
 
@@ -132,13 +172,13 @@ public class DomiService {
         } else {
             double promedio = repartidorEstrella.obtenerPromedio();
             promedio = Math.round(promedio * 100.0) / 100.0;
-            reporte += "Repartidor estrella: " + repartidorEstrella.getNombre();
+            reporte += "Repartidor estrella: " + repartidorEstrella.getNombre()
+                    + " | Promedio: " + promedio;
         }
 
         return reporte;
     }
 
-    //metodos del cliente
     public boolean validarBarrio(String barrio) {
         if (barrio == null || barrio.trim().isEmpty()) {
             return false;
@@ -195,7 +235,6 @@ public class DomiService {
             throw new IllegalArgumentException("El barrio no está dentro de la cobertura.");
         }
 
-        // Construir primero valida todos los datos antes de modificar el cliente.
         Cliente clienteValidado = new Cliente(
                 cliente.getCedula(),
                 cliente.getNombre(),
@@ -234,9 +273,10 @@ public class DomiService {
         clientes.remove(cliente.getCedula());
     }
 
-    //metodos pedido
     public double obtenerDistanciaBarrio(String barrio) {
-        validarBarrio(barrio);
+        if (!validarBarrio(barrio)) {
+            throw new IllegalArgumentException("El barrio no está dentro de la cobertura.");
+        }
 
         for (Map.Entry<String, Double> entrada : distancias.entrySet()) {
             if (entrada.getKey().equalsIgnoreCase(barrio.trim())) {
@@ -249,7 +289,6 @@ public class DomiService {
         );
     }
 
-    // Métodos de pedidos
     public ArrayList<Repartidor> obtenerRepartidoresAptos(double kilometros, boolean tamano) {
         ArrayList<Repartidor> aptos = new ArrayList<>();
 
