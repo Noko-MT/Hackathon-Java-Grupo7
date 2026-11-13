@@ -74,4 +74,117 @@ public class DomiService {
     public boolean puedeRepartir(Repartidor repartidor, double km, boolean esGrande) {
         return repartidor.isDisponible() && repartidor.puedeLlevar(km, esGrande, modoLluvia);
     }
+
+    //metodos del cliente
+    public boolean validarBarrio(String barrio) {
+        if (barrio == null || barrio.trim().isEmpty()) {
+            return false;
+        }
+
+        for (String barrioCubierto : barriosCobertura) {
+            if (barrioCubierto.equalsIgnoreCase(barrio.trim())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void registrarCliente(Cliente cliente) {
+        if (cliente == null) {
+            throw new IllegalArgumentException("El cliente no puede ser nulo.");
+        }
+
+        String cedula = cliente.getCedula().trim();
+
+        if (clientes.containsKey(cedula)) {
+            throw new IllegalArgumentException(
+                    "Ya existe un cliente con esa cédula."
+            );
+        }
+
+        if (!validarBarrio(cliente.getBarrio())) {
+            throw new IllegalArgumentException("El barrio no está dentro de la cobertura.");
+        }
+        clientes.put(cedula, cliente);
+    }
+
+    public List<Cliente> listarClientes() {
+        return new ArrayList<>(clientes.values());
+    }
+
+    public Cliente buscarCliente(String cedula) {
+        if (cedula == null || cedula.trim().isEmpty()) {
+            return null;
+        }
+
+        return clientes.get(cedula.trim());
+    }
+
+    public void editarCliente(String cedula, String telefono, String barrio, String direccion) {
+        Cliente cliente = buscarCliente(cedula);
+
+        if (cliente == null) {
+            throw new IllegalArgumentException("No existe un cliente con esa cédula.");
+        }
+
+        if (!validarBarrio(barrio)) {
+            throw new IllegalArgumentException("El barrio no está dentro de la cobertura.");
+        }
+
+        // Construir primero valida todos los datos antes de modificar el cliente.
+        Cliente clienteValidado = new Cliente(
+                cliente.getCedula(),
+                cliente.getNombre(),
+                telefono,
+                barrio,
+                direccion
+        );
+
+        cliente.setTelefono(clienteValidado.getTelefono());
+        cliente.setBarrio(clienteValidado.getBarrio());
+        cliente.setDireccion(clienteValidado.getDireccion());
+    }
+
+    public void eliminarCliente(String cedula) {
+        Cliente cliente = buscarCliente(cedula);
+
+        if (cliente == null) {
+            throw new IllegalArgumentException(
+                    "No existe un cliente con esa cédula."
+            );
+        }
+
+        for (Pedido pedido : pedidos) {
+            boolean esPedidoEnCamino =
+                    "EN_CAMINO".equals(pedido.getEstado());
+
+            boolean perteneceAlCliente =
+                    pedido.getCliente().getCedula().equals(cliente.getCedula());
+
+            if (esPedidoEnCamino && perteneceAlCliente) {
+                throw new IllegalArgumentException(
+                        "No se puede eliminar un cliente que tiene pedidos en camino."
+                );
+            }
+        }
+
+        clientes.remove(cliente.getCedula());
+    }
+
+    //metodos pedido
+    public double obtenerDistanciaBarrio(String barrio) {
+        validarBarrio(barrio);
+
+        for (Map.Entry<String, Double> entrada : distancias.entrySet()) {
+            if (entrada.getKey().equalsIgnoreCase(barrio.trim())) {
+                return entrada.getValue();
+            }
+        }
+
+        throw new IllegalArgumentException(
+                "No se encontró la distancia para ese barrio."
+        );
+    }
+
 }

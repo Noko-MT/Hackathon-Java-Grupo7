@@ -1,5 +1,4 @@
-
-package modelo;
+package Hackathon.modelo;
 
 public class Cliente {
 
